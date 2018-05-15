@@ -1,0 +1,132 @@
+wd$ = homeDirectory$ + "\Documents\Adv Big Data\"
+inDir$ = wd$ + "SSPNet-Speaker-Personality-Corpus\Audio_clips\"
+inDirWavs$ = inDir$ + "*.wav"
+
+wavList = Create Strings as file list: "wavList", inDirWavs$
+selectObject: wavList
+numFiles = Get number of strings
+
+maxIndex = 5
+
+for index from 1 to maxIndex
+	printline Processing file 'index'...
+	
+	#create prosodic objects
+	selectObject: 'index'
+	wavname$ = selected$()
+	pitchObj = To Pitch... 0 75 600
+	selectObject: 'index'
+	intensityObj = To Intensity... 100 0 Subtract mean
+	selectObject: 'index'
+	formantObj = To Formant (burg)... 0 5 5500 0.025 50
+	selectObject: 'index'
+	harmonicityObj = To Harmonicity (cc)... 0.01 75 0.1 1.0
+
+	startTime = Get start time
+	endTime = Get end time
+	numberOfTimeSteps = floor((endTime - startTime) / 0.05)
+
+	printline 'numberOfTimeSteps'
+
+	table = Create TableOfReal... 'index' numberOfTimeSteps 9
+
+	for step to numberOfTimeSteps
+		st = startTime + (step - 1) * 0.05
+		en = st + 0.05
+		startTime[step] = st
+		endTime[step] = en
+		selectObject: pitchObj
+		meanPitch[step] = Get mean... 'st' 'en' Hertz
+		if meanPitch[step] = undefined
+			meanPitch[step] = -1
+		endif
+
+		selectObject: intensityObj
+		meanIntensity[step] = Get mean... 'st' 'en' dB
+		if meanIntensity[step] = undefined
+			meanIntensity[step] = -1
+		endif
+
+		selectObject: formantObj
+		meanF1[step] = Get mean... 1 'st' 'en' Hertz
+		meanF2[step] = Get mean... 2 'st' 'en' Hertz
+		if meanF1[step] = undefined
+			meanF1[step] = -1
+		endif
+		if meanF2[step] = undefined
+			meanF2[step] = -1
+		endif
+		
+		selectObject: harmonicityObj
+		harmonicity[step] = Get mean... 'st' 'en'
+		if harmonicity[step] = undefined
+			harmonicity[step] = -1
+		endif
+	endfor
+	
+	# deltas
+	for intervalNumber from 1 to numberOfTimeSteps
+		if intervalNumber = 1
+			deltaPitch[intervalNumber] = meanPitch[intervalNumber+1] / (endTime[intervalNumber] - startTime[intervalNumber])
+			deltaIntensity[intervalNumber] = meanIntensity[intervalNumber+1] / (endTime[intervalNumber] - startTime[intervalNumber])
+			deltaF1[intervalNumber] = meanF1[intervalNumber+1] / (endTime[intervalNumber] - startTime[intervalNumber])
+			deltaF2[intervalNumber] = meanF2[intervalNumber+1] / (endTime[intervalNumber] - startTime[intervalNumber])
+		elsif intervalNumber = numberOfTimeSteps
+			deltaPitch[intervalNumber] = -meanPitch[intervalNumber-1] / (endTime[intervalNumber] - startTime[intervalNumber])
+			deltaIntensity[intervalNumber] = -meanIntensity[intervalNumber-1] / (endTime[intervalNumber] - startTime[intervalNumber])
+			deltaF1[intervalNumber] = -meanF1[intervalNumber-1] / (endTime[intervalNumber] - startTime[intervalNumber])
+			deltaF2[intervalNumber] = -meanF2[intervalNumber-1] / (endTime[intervalNumber] - startTime[intervalNumber])
+		else
+			deltaPitch[intervalNumber] = (meanPitch[intervalNumber+1]-meanPitch[intervalNumber-1]) / (endTime[intervalNumber] - startTime[intervalNumber])
+			deltaIntensity[intervalNumber] = (meanIntensity[intervalNumber+1] -meanIntensity[intervalNumber-1]) / (endTime[intervalNumber] - startTime[intervalNumber])
+			deltaF1[intervalNumber] = (meanF1[intervalNumber+1]-meanF1[intervalNumber-1]) / (endTime[intervalNumber] - startTime[intervalNumber])
+			deltaF2[intervalNumber] = (meanF2[intervalNumber+1]-meanF2[intervalNumber-1]) / (endTime[intervalNumber] - startTime[intervalNumber])
+		endif
+		
+	endfor
+
+	selectObject: table
+
+	for intervalNumber from 1 to numberOfTimeSteps
+		st = startTime[intervalNumber]
+		en = endTime[intervalNumber]
+		avP = meanPitch[intervalNumber]
+		dP = deltaPitch[intervalNumber]
+		avI = meanIntensity[intervalNumber]
+		dI = deltaIntensity[intervalNumber]
+		f1 = meanF1[intervalNumber]
+		f2 = meanF2[intervalNumber]
+		dF1 = deltaF1[intervalNumber]
+		dF2 = deltaF2[intervalNumber]
+		h = harmonicity[intervalNumber]
+		printline Token 'intervalNumber' : 'st's to 'en's; pitch = 'avP'; delta pitch = 'dP'; intensity = 'avI'; delta int = 'dI'; F1 = 'f1'; dF1 = 'dF1'; F2 = 'f2'; dF2 = 'dF2'; harmonicity = 'h'
+		
+		# populate the table
+		Set value... 'intervalNumber' 1 'avP'
+		Set value... 'intervalNumber' 2 'dP'
+		Set value... 'intervalNumber' 3 'avI'
+		Set value... 'intervalNumber' 4 'dI'
+		Set value... 'intervalNumber' 5 'f1'
+		Set value... 'intervalNumber' 6 'dF1'
+		Set value... 'intervalNumber' 7 'f2'
+		Set value... 'intervalNumber' 8 'dF2'
+		Set value... 'intervalNumber' 9 'h'
+
+		Set column label (index)...  1 avP
+		Set column label (index)...  2 dP
+		Set column label (index)...  3 avI
+		Set column label (index)...  4 dI
+		Set column label (index)...  5 f1
+		Set column label (index)...  6 dF1
+		Set column label (index)...  7 f2
+		Set column label (index)...  8 dF2
+		Set column label (index)...  9 h
+
+		
+	endfor
+	
+	selectObject: table
+	filename$ = "../Conflict/output/" + wavname$ + ".txt"
+	Save as headerless spreadsheet file: filename$
+	printline Done!
+endfor
